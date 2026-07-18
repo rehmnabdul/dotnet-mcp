@@ -1,0 +1,11 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <RootNamespace>DotnetMcp.Abstractions</RootNamespace>
+    <AssemblyName>DotnetMcp.Abstractions</AssemblyName>
+    <Description>Core abstractions, attributes, and options for dotnet-mcp.</Description>
+    <PackageTags>mcp;model-context-protocol;aspnetcore</PackageTags>
+  </PropertyGroup>
+
+</Project>

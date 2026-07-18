@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Authors>Abdur Rahman</Authors>
+    <Company>Abdur Rahman</Company>
+    <Copyright>Copyright (c) 2026 Abdur Rahman</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+</Project>

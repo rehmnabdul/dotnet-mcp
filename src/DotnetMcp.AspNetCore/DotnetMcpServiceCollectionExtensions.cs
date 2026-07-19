@@ -1,6 +1,9 @@
 using DotnetMcp.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
 
 namespace DotnetMcp.AspNetCore;
 
@@ -16,19 +19,45 @@ public static class DotnetMcpServiceCollectionExtensions
             services.Configure(configure);
         }
 
-        services.AddSingleton<EndpointExposureFilter>(sp =>
+        services.TryAddSingleton<EndpointExposureFilter>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<DotnetMcpOptions>>().Value;
             return new EndpointExposureFilter(options);
         });
 
-        services.AddSingleton<ToolNamingStrategy>(sp =>
+        services.TryAddSingleton<ToolNamingStrategy>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<DotnetMcpOptions>>().Value;
             return new ToolNamingStrategy(options);
         });
 
-        services.AddSingleton<IEndpointDiscoveryService, EndpointDiscoveryService>();
+        services.TryAddSingleton<ToolSchemaGenerator>();
+        services.TryAddSingleton<McpToolCatalog>();
+        services.TryAddSingleton<IEndpointDiscoveryService, EndpointDiscoveryService>();
+        services.TryAddSingleton<McpEndpointInvoker>();
+        services.TryAddSingleton<McpToolHandlers>();
+
+        services.AddHttpContextAccessor();
+
+        services.AddMcpServer(options =>
+        {
+            options.ServerInfo = new Implementation
+            {
+                Name = "dotnet-mcp",
+                Version = typeof(DotnetMcpServiceCollectionExtensions).Assembly.GetName().Version?.ToString() ?? "0.1.0"
+            };
+        })
+        .WithHttpTransport()
+        .WithListToolsHandler((context, cancellationToken) =>
+        {
+            var handlers = context.Services!.GetRequiredService<McpToolHandlers>();
+            return handlers.ListToolsAsync(context, cancellationToken);
+        })
+        .WithCallToolHandler((context, cancellationToken) =>
+        {
+            var handlers = context.Services!.GetRequiredService<McpToolHandlers>();
+            return handlers.CallToolAsync(context, cancellationToken);
+        });
 
         return services;
     }

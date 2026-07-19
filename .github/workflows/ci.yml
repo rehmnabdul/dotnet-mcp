@@ -28,4 +28,4 @@ jobs:
         run: dotnet build DotnetMcp.sln --no-restore -c Release
 
       - name: Test
-        run: dotnet test tests/DotnetMcp.Tests/DotnetMcp.Tests.csproj --no-build -c Release -v n
+        run: dotnet test DotnetMcp.sln --no-build -c Release -v n

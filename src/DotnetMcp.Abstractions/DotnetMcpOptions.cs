@@ -13,4 +13,6 @@ public class DotnetMcpOptions
     public Func<EndpointDescriptor, bool>? Filter { get; set; }
 
     public bool RequireExplicitAnnotation { get; set; }
+
+    public string McpRoutePattern { get; set; } = "/mcp";
 }

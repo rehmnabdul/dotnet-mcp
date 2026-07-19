@@ -4,8 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>DotnetMcp</RootNamespace>
     <AssemblyName>DotnetMcp</AssemblyName>
-    <Description>Endpoint discovery, filtering, and tool naming for dotnet-mcp.</Description>
-    <PackageTags>mcp;model-context-protocol;aspnetcore</PackageTags>
+    <PackageId>DotnetMcp.Core</PackageId>
+    <Description>Endpoint discovery, filtering, schema generation, and tool naming for dotnet-mcp.</Description>
+    <PackageTags>mcp;model-context-protocol;aspnetcore;ai;agents</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

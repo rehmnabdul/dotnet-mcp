@@ -2,10 +2,12 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
     <RootNamespace>DotnetMcp.Abstractions</RootNamespace>
     <AssemblyName>DotnetMcp.Abstractions</AssemblyName>
+    <PackageId>DotnetMcp.Abstractions</PackageId>
     <Description>Core abstractions, attributes, and options for dotnet-mcp.</Description>
-    <PackageTags>mcp;model-context-protocol;aspnetcore</PackageTags>
+    <PackageTags>mcp;model-context-protocol;aspnetcore;ai;agents</PackageTags>
   </PropertyGroup>
 
 </Project>

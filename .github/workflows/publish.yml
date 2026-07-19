@@ -1,0 +1,45 @@
+name: Publish NuGet
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore DotnetMcp.sln
+
+      - name: Build
+        run: dotnet build DotnetMcp.sln --no-restore -c Release
+
+      - name: Test
+        run: dotnet test DotnetMcp.sln --no-build -c Release -v n
+
+      - name: Pack
+        run: |
+          dotnet pack src/DotnetMcp.Abstractions/DotnetMcp.Abstractions.csproj -c Release --no-build -o artifacts
+          dotnet pack src/DotnetMcp/DotnetMcp.csproj -c Release --no-build -o artifacts
+          dotnet pack src/DotnetMcp.AspNetCore/DotnetMcp.AspNetCore.csproj -c Release --no-build -o artifacts
+
+      - name: Push to NuGet
+        run: |
+          dotnet nuget push artifacts/*.nupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+          dotnet nuget push artifacts/*.snupkg \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate

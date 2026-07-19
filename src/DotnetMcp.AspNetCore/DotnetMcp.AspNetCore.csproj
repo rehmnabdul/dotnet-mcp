@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>DotnetMcp.AspNetCore</RootNamespace>
+    <AssemblyName>DotnetMcp.AspNetCore</AssemblyName>
+    <Description>ASP.NET Core integration for dotnet-mcp.</Description>
+    <PackageTags>mcp;model-context-protocol;aspnetcore</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DotnetMcp\DotnetMcp.csproj" />
+    <ProjectReference Include="..\DotnetMcp.Abstractions\DotnetMcp.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+
+</Project>

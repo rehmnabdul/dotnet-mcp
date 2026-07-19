@@ -23,10 +23,7 @@ public class EndpointDiscoveryServiceTests
                 "PUT",
                 "api/users/{id}"));
 
-        var service = new EndpointDiscoveryService(
-            provider,
-            new EndpointExposureFilter(options),
-            new ToolNamingStrategy(options));
+        var service = CreateDiscoveryService(options, provider);
 
         var endpoints = service.DiscoverEndpoints();
 
@@ -50,15 +47,25 @@ public class EndpointDiscoveryServiceTests
                 "GET",
                 "api/profile"));
 
-        var service = new EndpointDiscoveryService(
-            provider,
-            new EndpointExposureFilter(options),
-            new ToolNamingStrategy(options));
+        var service = CreateDiscoveryService(options, provider);
 
         var endpoints = service.DiscoverEndpoints();
 
         endpoints.Should().ContainSingle();
         endpoints[0].ToolName.Should().Be("fetch_user_profile");
+    }
+
+    private static EndpointDiscoveryService CreateDiscoveryService(
+        DotnetMcpOptions options,
+        IApiDescriptionGroupCollectionProvider provider)
+    {
+        var catalog = new McpToolCatalog(
+            provider,
+            new EndpointExposureFilter(options),
+            new ToolNamingStrategy(options),
+            new ToolSchemaGenerator());
+
+        return new EndpointDiscoveryService(catalog);
     }
 
     private sealed class TestApiDescriptionGroupCollectionProvider : IApiDescriptionGroupCollectionProvider

@@ -4,8 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>DotnetMcp.AspNetCore</RootNamespace>
     <AssemblyName>DotnetMcp.AspNetCore</AssemblyName>
-    <Description>ASP.NET Core integration for dotnet-mcp.</Description>
-    <PackageTags>mcp;model-context-protocol;aspnetcore</PackageTags>
+    <PackageId>DotnetMcp.AspNetCore</PackageId>
+    <Description>ASP.NET Core integration that exposes your APIs as an MCP server.</Description>
+    <PackageTags>mcp;model-context-protocol;aspnetcore;ai;agents</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

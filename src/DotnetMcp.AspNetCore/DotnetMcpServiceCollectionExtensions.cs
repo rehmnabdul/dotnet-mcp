@@ -34,6 +34,7 @@ public static class DotnetMcpServiceCollectionExtensions
         services.TryAddSingleton<ToolSchemaGenerator>();
         services.TryAddSingleton<McpToolCatalog>();
         services.TryAddSingleton<IEndpointDiscoveryService, EndpointDiscoveryService>();
+        services.TryAddSingleton<McpEndpointAuthorizationEvaluator>();
         services.TryAddSingleton<McpEndpointInvoker>();
         services.TryAddSingleton<McpToolHandlers>();
 
@@ -47,7 +48,9 @@ public static class DotnetMcpServiceCollectionExtensions
                 Version = typeof(DotnetMcpServiceCollectionExtensions).Assembly.GetName().Version?.ToString() ?? "0.1.0"
             };
         })
-        .WithHttpTransport()
+        // Stateless mode keeps IHttpContextAccessor/User available during tools/call
+        // (required for auth enforcement on ModelContextProtocol.AspNetCore 0.2.x).
+        .WithHttpTransport(options => options.Stateless = true)
         .WithListToolsHandler((context, cancellationToken) =>
         {
             var handlers = context.Services!.GetRequiredService<McpToolHandlers>();

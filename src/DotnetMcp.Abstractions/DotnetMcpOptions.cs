@@ -15,4 +15,10 @@ public class DotnetMcpOptions
     public bool RequireExplicitAnnotation { get; set; }
 
     public string McpRoutePattern { get; set; } = "/mcp";
+
+    /// <summary>
+    /// When true, MCP tool calls enforce ASP.NET Core authorization metadata
+    /// (<c>[Authorize]</c>, policies, roles) and <see cref="McpExposeAttribute.Roles"/>.
+    /// </summary>
+    public bool EnforceEndpointAuthorization { get; set; } = true;
 }

@@ -2,7 +2,7 @@
 
 A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server. AI assistants and agents can discover your endpoints as MCP tools, inspect JSON Schema for parameters, and invoke them over HTTP with minimal configuration.
 
-**Current release:** [`0.1.0-alpha`](https://www.nuget.org/packages/DotnetMcp.AspNetCore/0.1.0-alpha) (pre-release)
+**Current release:** [`0.1.1-alpha`](https://www.nuget.org/packages/DotnetMcp.AspNetCore/0.1.1-alpha) (pre-release)
 
 ## Features
 
@@ -11,7 +11,8 @@ A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Pro
 - **JSON Schema generation** — tool input schemas are built from route, query, and body parameters
 - **In-process invocation** — MCP tool calls dispatch through the same endpoint pipeline as normal HTTP requests
 - **HTTP transport** — MCP over streamable HTTP/SSE via the official `ModelContextProtocol.AspNetCore` SDK
-- **Auth forwarding** — `Authorization` headers from the MCP request are forwarded to invoked endpoints
+- **Auth enforcement** — `[Authorize]`, policies, roles, and `[McpExpose(Roles = ...)]` are checked on tool calls
+- **Auth forwarding** — `Authorization` headers and the authenticated `User` from the MCP request are forwarded to invoked endpoints
 
 ## Packages
 
@@ -33,7 +34,7 @@ A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Pro
 ### 1. Install
 
 ```bash
-dotnet add package DotnetMcp.AspNetCore --version 0.1.0-alpha
+dotnet add package DotnetMcp.AspNetCore --version 0.1.1-alpha
 ```
 
 ### 2. Register services and map the MCP endpoint
@@ -146,6 +147,7 @@ builder.Services.AddDotnetMcp(options =>
 | `ExcludePaths` | `[]` | Path prefixes to never expose (case-insensitive) |
 | `McpRoutePattern` | `"/mcp"` | Documented default route pattern (map with `MapDotnetMcp`) |
 | `Filter` | `null` | Additional predicate over `EndpointDescriptor` |
+| `EnforceEndpointAuthorization` | `true` | Enforce `[Authorize]` / roles on MCP tool calls |
 
 ## Exposing endpoints
 
@@ -200,6 +202,38 @@ public class UsersController : ControllerBase
     public IActionResult Create([FromBody] CreateUserRequest request) =>
         Created(string.Empty, request);
 }
+```
+
+### Authorization
+
+MCP tool calls run outside the normal HTTP middleware pipeline for the target endpoint, so authorization is enforced explicitly before invocation:
+
+1. Endpoint `[Authorize]` / policy / role metadata (unless `[AllowAnonymous]`)
+2. `[McpExpose(Roles = ...)]` / `.WithMcpExpose` role requirements (always enforced when set)
+3. The MCP request's authenticated `User` and `Authorization` header are copied onto the in-process call
+
+```csharp
+[HttpGet("admin/report")]
+[Authorize(Roles = "Admin")]
+[McpExpose(Name = "get_admin_report", Description = "Admin-only report")]
+public IActionResult AdminReport() => Ok(new { ok = true });
+
+// Or require roles only at the MCP layer:
+[HttpGet("stats")]
+[AllowAnonymous]
+[McpExpose(Name = "get_stats", Roles = new[] { "Analyst" })]
+public IActionResult Stats() => Ok();
+```
+
+Your app still needs standard ASP.NET Core auth setup (`AddAuthentication`, `AddAuthorization`, `UseAuthentication`).
+
+To disable enforcement (not recommended):
+
+```csharp
+builder.Services.AddDotnetMcp(options =>
+{
+    options.EnforceEndpointAuthorization = false;
+});
 ```
 
 ### Hide endpoints — `[McpIgnore]`
@@ -274,7 +308,7 @@ When a client calls a tool:
 5. The HTTP response body is returned as MCP text content
 6. HTTP status codes ≥ 400 are reported as tool errors
 
-The `Authorization` header on the MCP HTTP request is forwarded to the invoked endpoint, so your existing auth middleware continues to apply.
+The MCP request's `Authorization` header and authenticated `User` are forwarded to the invoked endpoint. Authorization metadata is evaluated before invocation (see [Authorization](#authorization)).
 
 ## Project structure
 
@@ -318,6 +352,23 @@ dotnet pack src/DotnetMcp.AspNetCore/DotnetMcp.AspNetCore.csproj -c Release -o a
 
 ## Releases
 
+### `0.1.1-alpha`
+
+Package metadata fix + authorization enforcement.
+
+**Includes:**
+
+- NuGet packages now carry MIT license, authors, project/repository URLs, and symbol packages (`.snupkg`)
+- MCP tool calls enforce `[Authorize]`, policies/roles, and `[McpExpose(Roles = ...)]`
+- Authenticated `User` is forwarded with the in-process invocation
+- `EnforceEndpointAuthorization` option (default `true`)
+
+**Install:**
+
+```bash
+dotnet add package DotnetMcp.AspNetCore --version 0.1.1-alpha
+```
+
 ### `0.1.0-alpha` (2026-07-19)
 
 First public pre-release on NuGet.
@@ -331,34 +382,21 @@ First public pre-release on NuGet.
 - In-process endpoint invocation with auth header forwarding
 - Sample app and integration tests
 
-**Install:**
-
-```bash
-dotnet add package DotnetMcp.AspNetCore --version 0.1.0-alpha
-```
-
-**Known limitations (alpha):**
-
-- No stdio transport yet
-- No built-in OpenAPI MCP resource
-- Symbol packages are not published
-- Package license metadata not yet embedded (MIT — see [LICENSE](LICENSE))
-
 ### Publishing a new version
 
-Maintainers: bump `Version` in `src/Directory.Build.props`, merge to `main`, then tag and push:
+Maintainers: bump `Version` in root `Directory.Build.props`, merge to `main`, then tag and push:
 
 ```bash
-git tag v0.2.0-alpha
-git push origin v0.2.0-alpha
+git tag v0.1.1-alpha
+git push origin v0.1.1-alpha
 ```
 
 The [Publish NuGet](.github/workflows/publish.yml) workflow runs on `v*` tags, uses the `production` GitHub environment, and pushes all three packages to nuget.org.
 
 ## Roadmap
 
-- **Phase 2:** stdio transport, auth policy integration, OpenAPI resource
-- **Stable 1.0:** API surface review, documentation, and license metadata in packages
+- **Phase 2 (remaining):** stdio transport, OpenAPI MCP resource, richer policy samples
+- **Stable 1.0:** API surface review and final documentation pass
 
 ## Contributing
 

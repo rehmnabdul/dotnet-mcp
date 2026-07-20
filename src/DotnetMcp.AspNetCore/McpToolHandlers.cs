@@ -60,8 +60,7 @@ internal sealed class McpToolHandlers
         }
 
         var requestServices = context.Services ?? throw new InvalidOperationException("Server services are unavailable.");
-        var httpContextAccessor = requestServices.GetService<IHttpContextAccessor>();
-        var httpContext = httpContextAccessor?.HttpContext;
+        var httpContext = requestServices.GetService<IHttpContextAccessor>()?.HttpContext;
 
         return await _endpointInvoker.InvokeAsync(
             tool,

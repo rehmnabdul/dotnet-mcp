@@ -13,10 +13,14 @@ namespace DotnetMcp.AspNetCore;
 public sealed class McpEndpointInvoker
 {
     private readonly IEnumerable<EndpointDataSource> _endpointDataSources;
+    private readonly McpEndpointAuthorizationEvaluator _authorizationEvaluator;
 
-    public McpEndpointInvoker(IEnumerable<EndpointDataSource> endpointDataSources)
+    public McpEndpointInvoker(
+        IEnumerable<EndpointDataSource> endpointDataSources,
+        McpEndpointAuthorizationEvaluator authorizationEvaluator)
     {
         _endpointDataSources = endpointDataSources;
+        _authorizationEvaluator = authorizationEvaluator;
     }
 
     public async Task<CallToolResponse> InvokeAsync(
@@ -38,9 +42,14 @@ public sealed class McpEndpointInvoker
         context.Request.Host = sourceHttpContext?.Request.Host ?? new HostString("localhost");
         context.Response.Body = new MemoryStream();
 
-        if (sourceHttpContext?.Request.Headers.Authorization.Count > 0)
+        if (sourceHttpContext is not null)
         {
-            context.Request.Headers.Authorization = sourceHttpContext.Request.Headers.Authorization;
+            context.User = sourceHttpContext.User;
+
+            if (sourceHttpContext.Request.Headers.Authorization.Count > 0)
+            {
+                context.Request.Headers.Authorization = sourceHttpContext.Request.Headers.Authorization;
+            }
         }
 
         var path = BuildPath(tool.ApiDescription, arguments, out var routeValues);
@@ -63,6 +72,20 @@ public sealed class McpEndpointInvoker
         if (endpoint?.RequestDelegate is null)
         {
             return CreateErrorResponse($"No endpoint matched {tool.Descriptor.HttpMethod} {path}.");
+        }
+
+        var authorization = await _authorizationEvaluator.AuthorizeAsync(
+            endpoint,
+            tool.Descriptor,
+            sourceHttpContext,
+            requestServices,
+            cancellationToken);
+
+        if (!authorization.Succeeded)
+        {
+            return CreateErrorResponse(
+                authorization.Message ?? $"HTTP {authorization.StatusCode}",
+                authorization.StatusCode);
         }
 
         context.SetEndpoint(endpoint);
@@ -95,6 +118,8 @@ public sealed class McpEndpointInvoker
     private Endpoint? FindEndpoint(string httpMethod, PathString path)
     {
         var normalizedPath = NormalizePath(path.Value ?? string.Empty);
+        Endpoint? bestMatch = null;
+        var bestScore = -1;
 
         foreach (var dataSource in _endpointDataSources)
         {
@@ -113,18 +138,26 @@ public sealed class McpEndpointInvoker
                 }
 
                 var routePattern = routeEndpoint.RoutePattern.RawText;
-                if (RouteMatches(normalizedPath, routePattern))
+                if (!TryScoreRouteMatch(normalizedPath, routePattern, out var score))
                 {
-                    return endpoint;
+                    continue;
+                }
+
+                // Prefer more literal segments so api/users/secure wins over api/users/{id}.
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestMatch = endpoint;
                 }
             }
         }
 
-        return null;
+        return bestMatch;
     }
 
-    private static bool RouteMatches(string requestPath, string? routePattern)
+    private static bool TryScoreRouteMatch(string requestPath, string? routePattern, out int score)
     {
+        score = 0;
         if (string.IsNullOrWhiteSpace(routePattern))
         {
             return false;
@@ -151,6 +184,8 @@ public sealed class McpEndpointInvoker
             {
                 return false;
             }
+
+            score++;
         }
 
         return true;
@@ -161,8 +196,10 @@ public sealed class McpEndpointInvoker
         return path.Trim().TrimStart('/');
     }
 
-    private static CallToolResponse CreateErrorResponse(string message)
+    private static CallToolResponse CreateErrorResponse(string message, int? statusCode = null)
     {
+        var text = statusCode is null ? message : $"HTTP {statusCode}: {message}";
+
         return new CallToolResponse
         {
             IsError = true,
@@ -171,7 +208,7 @@ public sealed class McpEndpointInvoker
                 new Content
                 {
                     Type = "text",
-                    Text = message
+                    Text = text
                 }
             ]
         };

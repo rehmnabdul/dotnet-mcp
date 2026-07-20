@@ -35,9 +35,8 @@ public class McpServerIntegrationTests : IClassFixture<WebApplicationFactory<glo
             new Dictionary<string, object?> { ["id"] = "42" });
 
         response.IsError.Should().BeFalse();
-        response.Content.Should().NotBeNullOrEmpty();
-        response.Content![0].Text.Should().Contain("42");
-        response.Content[0].Text.Should().Contain("Ada");
+        GetText(response).Should().Contain("42");
+        GetText(response).Should().Contain("Ada");
     }
 
     [Fact]
@@ -50,23 +49,30 @@ public class McpServerIntegrationTests : IClassFixture<WebApplicationFactory<glo
             new Dictionary<string, object?> { ["request"] = new { name = "Grace" } });
 
         response.IsError.Should().BeFalse();
-        response.Content.Should().NotBeNullOrEmpty();
-        response.Content![0].Text.Should().Contain("Grace");
+        GetText(response).Should().Contain("Grace");
     }
 
-    private async Task<IMcpClient> CreateMcpClientAsync()
+    private async Task<McpClient> CreateMcpClientAsync()
     {
         var httpClient = _factory.CreateClient();
         var endpoint = new Uri(httpClient.BaseAddress!, "/mcp");
 
-        var transport = new SseClientTransport(
-            new SseClientTransportOptions
+        var transport = new HttpClientTransport(
+            new HttpClientTransportOptions
             {
                 Endpoint = endpoint,
-                UseStreamableHttp = true
+                TransportMode = HttpTransportMode.StreamableHttp
             },
             httpClient);
 
-        return await McpClientFactory.CreateAsync(transport);
+        return await McpClient.CreateAsync(transport);
+    }
+
+    private static string GetText(CallToolResult response)
+    {
+        response.Content.Should().NotBeNullOrEmpty();
+        var block = response.Content!.OfType<TextContentBlock>().FirstOrDefault();
+        block.Should().NotBeNull();
+        return block!.Text;
     }
 }

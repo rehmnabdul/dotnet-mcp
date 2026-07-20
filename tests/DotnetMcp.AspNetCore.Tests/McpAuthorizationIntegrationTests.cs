@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 
 namespace DotnetMcp.AspNetCore.Tests;
 
@@ -23,8 +24,7 @@ public class McpAuthorizationIntegrationTests : IClassFixture<WebApplicationFact
             new Dictionary<string, object?>());
 
         response.IsError.Should().BeTrue();
-        response.Content.Should().NotBeNullOrEmpty();
-        response.Content![0].Text.Should().Contain("401");
+        GetText(response).Should().Contain("401");
     }
 
     [Fact]
@@ -37,8 +37,7 @@ public class McpAuthorizationIntegrationTests : IClassFixture<WebApplicationFact
             new Dictionary<string, object?>());
 
         response.IsError.Should().BeFalse();
-        response.Content.Should().NotBeNullOrEmpty();
-        response.Content![0].Text.Should().Contain("secure");
+        GetText(response).Should().Contain("secure");
     }
 
     [Fact]
@@ -53,8 +52,7 @@ public class McpAuthorizationIntegrationTests : IClassFixture<WebApplicationFact
             new Dictionary<string, object?>());
 
         response.IsError.Should().BeTrue();
-        response.Content.Should().NotBeNullOrEmpty();
-        response.Content![0].Text.Should().Contain("403");
+        GetText(response).Should().Contain("403");
     }
 
     [Fact]
@@ -69,8 +67,7 @@ public class McpAuthorizationIntegrationTests : IClassFixture<WebApplicationFact
             new Dictionary<string, object?>());
 
         response.IsError.Should().BeFalse();
-        response.Content.Should().NotBeNullOrEmpty();
-        response.Content![0].Text.Should().Contain("admin");
+        GetText(response).Should().Contain("admin");
     }
 
     [Fact]
@@ -83,8 +80,7 @@ public class McpAuthorizationIntegrationTests : IClassFixture<WebApplicationFact
             new Dictionary<string, object?>());
 
         response.IsError.Should().BeTrue();
-        response.Content.Should().NotBeNullOrEmpty();
-        response.Content![0].Text.Should().Match(text => text.Contains("401") || text.Contains("403"));
+        GetText(response).Should().Match(text => text.Contains("401") || text.Contains("403"));
     }
 
     [Fact]
@@ -99,28 +95,31 @@ public class McpAuthorizationIntegrationTests : IClassFixture<WebApplicationFact
             new Dictionary<string, object?>());
 
         response.IsError.Should().BeFalse();
-        response.Content.Should().NotBeNullOrEmpty();
-        response.Content![0].Text.Should().Contain("mcpRole");
+        GetText(response).Should().Contain("mcpRole");
     }
 
-    private async Task<IMcpClient> CreateMcpClientAsync(params (string Name, string Value)[] headers)
+    private async Task<McpClient> CreateMcpClientAsync(params (string Name, string Value)[] headers)
     {
         var httpClient = _factory.CreateClient();
-        foreach (var (name, value) in headers)
-        {
-            httpClient.DefaultRequestHeaders.Add(name, value);
-        }
+        var additionalHeaders = headers.ToDictionary(header => header.Name, header => header.Value);
 
-        var endpoint = new Uri(httpClient.BaseAddress!, "/mcp");
-
-        var transport = new SseClientTransport(
-            new SseClientTransportOptions
+        var transport = new HttpClientTransport(
+            new HttpClientTransportOptions
             {
-                Endpoint = endpoint,
-                UseStreamableHttp = true
+                Endpoint = new Uri(httpClient.BaseAddress!, "/mcp"),
+                TransportMode = HttpTransportMode.StreamableHttp,
+                AdditionalHeaders = additionalHeaders
             },
             httpClient);
 
-        return await McpClientFactory.CreateAsync(transport);
+        return await McpClient.CreateAsync(transport);
+    }
+
+    private static string GetText(CallToolResult response)
+    {
+        response.Content.Should().NotBeNullOrEmpty();
+        var block = response.Content!.OfType<TextContentBlock>().FirstOrDefault();
+        block.Should().NotBeNull();
+        return block!.Text;
     }
 }

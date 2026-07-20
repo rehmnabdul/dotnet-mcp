@@ -59,13 +59,13 @@ internal sealed class McpResourceHandlers
         var uri = context.Params?.Uri;
         if (string.IsNullOrWhiteSpace(uri))
         {
-            throw new McpException("Resource URI is required.", McpErrorCode.InvalidParams);
+            throw new McpException("Resource URI is required.");
         }
 
         if (!_options.EnableOpenApiResource ||
             !string.Equals(uri, _options.OpenApiResourceUri, StringComparison.Ordinal))
         {
-            throw new McpException($"Resource '{uri}' was not found.", McpErrorCode.InvalidParams);
+            throw new McpException($"Resource '{uri}' was not found.");
         }
 
         var document = _openApiDocumentGenerator.GenerateJson();

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Mvc.Testing;
 using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 
 namespace DotnetMcp.AspNetCore.Tests;
 
@@ -33,7 +34,7 @@ public class McpOpenApiResourceIntegrationTests : IClassFixture<WebApplicationFa
         var result = await client.ReadResourceAsync("openapi://dotnet-mcp/document");
 
         result.Contents.Should().NotBeNullOrEmpty();
-        var text = result.Contents![0] as ModelContextProtocol.Protocol.TextResourceContents;
+        var text = result.Contents!.OfType<TextResourceContents>().FirstOrDefault();
         text.Should().NotBeNull();
         text!.MimeType.Should().Be("application/json");
         text.Text.Should().Contain("\"openapi\"");
@@ -41,19 +42,17 @@ public class McpOpenApiResourceIntegrationTests : IClassFixture<WebApplicationFa
         text.Text.Should().Contain("get_users_by_id");
     }
 
-    private async Task<IMcpClient> CreateMcpClientAsync()
+    private async Task<McpClient> CreateMcpClientAsync()
     {
         var httpClient = _factory.CreateClient();
-        var endpoint = new Uri(httpClient.BaseAddress!, "/mcp");
-
-        var transport = new SseClientTransport(
-            new SseClientTransportOptions
+        var transport = new HttpClientTransport(
+            new HttpClientTransportOptions
             {
-                Endpoint = endpoint,
-                UseStreamableHttp = true
+                Endpoint = new Uri(httpClient.BaseAddress!, "/mcp"),
+                TransportMode = HttpTransportMode.StreamableHttp
             },
             httpClient);
 
-        return await McpClientFactory.CreateAsync(transport);
+        return await McpClient.CreateAsync(transport);
     }
 }

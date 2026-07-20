@@ -1,5 +1,6 @@
 using FluentAssertions;
 using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
 
 namespace DotnetMcp.AspNetCore.Tests;
 
@@ -24,7 +25,7 @@ public class McpStdioIntegrationTests
             }
         });
 
-        await using var client = await McpClientFactory.CreateAsync(transport);
+        await using var client = await McpClient.CreateAsync(transport);
 
         var tools = await client.ListToolsAsync();
         tools.Should().Contain(tool => tool.Name == "get_users_by_id");
@@ -34,9 +35,10 @@ public class McpStdioIntegrationTests
             new Dictionary<string, object?> { ["id"] = "7" });
 
         response.IsError.Should().BeFalse();
-        response.Content.Should().NotBeNullOrEmpty();
-        response.Content![0].Text.Should().Contain("7");
-        response.Content[0].Text.Should().Contain("Ada");
+        var text = response.Content!.OfType<TextContentBlock>().FirstOrDefault();
+        text.Should().NotBeNull();
+        text!.Text.Should().Contain("7");
+        text.Text.Should().Contain("Ada");
     }
 
     private static string LocateTestAppDll()

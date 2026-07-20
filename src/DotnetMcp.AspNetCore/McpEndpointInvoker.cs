@@ -23,7 +23,7 @@ public sealed class McpEndpointInvoker
         _authorizationEvaluator = authorizationEvaluator;
     }
 
-    public async Task<CallToolResponse> InvokeAsync(
+    public async Task<CallToolResult> InvokeAsync(
         McpToolEntry tool,
         IReadOnlyDictionary<string, JsonElement>? arguments,
         HttpContext? sourceHttpContext,
@@ -101,14 +101,13 @@ public sealed class McpEndpointInvoker
             responseBody = $"HTTP {context.Response.StatusCode}";
         }
 
-        return new CallToolResponse
+        return new CallToolResult
         {
             IsError = isError,
             Content =
             [
-                new Content
+                new TextContentBlock
                 {
-                    Type = "text",
                     Text = responseBody
                 }
             ]
@@ -196,18 +195,17 @@ public sealed class McpEndpointInvoker
         return path.Trim().TrimStart('/');
     }
 
-    private static CallToolResponse CreateErrorResponse(string message, int? statusCode = null)
+    private static CallToolResult CreateErrorResponse(string message, int? statusCode = null)
     {
         var text = statusCode is null ? message : $"HTTP {statusCode}: {message}";
 
-        return new CallToolResponse
+        return new CallToolResult
         {
             IsError = true,
             Content =
             [
-                new Content
+                new TextContentBlock
                 {
-                    Type = "text",
                     Text = text
                 }
             ]

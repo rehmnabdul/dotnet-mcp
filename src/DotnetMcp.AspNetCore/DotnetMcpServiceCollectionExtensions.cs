@@ -9,6 +9,9 @@ namespace DotnetMcp.AspNetCore;
 
 public static class DotnetMcpServiceCollectionExtensions
 {
+    /// <summary>
+    /// Registers DotnetMcp services and configures the MCP server (HTTP or stdio).
+    /// </summary>
     public static IServiceCollection AddDotnetMcp(
         this IServiceCollection services,
         Action<DotnetMcpOptions>? configure = null)

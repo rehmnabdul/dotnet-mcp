@@ -2,7 +2,7 @@
 
 A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server. AI assistants and agents can discover your endpoints as MCP tools, inspect JSON Schema for parameters, and invoke them over HTTP with minimal configuration.
 
-**Current release:** [`0.1.3-alpha`](https://www.nuget.org/packages/DotnetMcp.AspNetCore/0.1.3-alpha) (pre-release)
+**Current release:** [`1.0.0-rc.1`](https://www.nuget.org/packages/DotnetMcp.AspNetCore/1.0.0-rc.1) (release candidate)
 
 ## Features
 
@@ -35,7 +35,7 @@ A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Pro
 ### 1. Install
 
 ```bash
-dotnet add package DotnetMcp.AspNetCore --version 0.1.3-alpha
+dotnet add package DotnetMcp.AspNetCore --version 1.0.0-rc.1
 ```
 
 ### 2. Register services and map the MCP endpoint
@@ -141,6 +141,34 @@ Example MCP host config (Cursor / Claude Desktop style):
 }
 ```
 
+## Auth policy sample
+
+`samples/TodoApi.Auth` shows JWT Bearer auth with ASP.NET policies and MCP role checks:
+
+```bash
+dotnet run --project samples/TodoApi.Auth
+```
+
+1. Mint a token:
+
+```bash
+curl -s http://localhost:5000/auth/token \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"ada","role":"Admin"}'
+```
+
+2. Call MCP tools with `Authorization: Bearer <token>` on the MCP HTTP client.
+
+What it demonstrates:
+
+| Endpoint | ASP.NET policy | MCP extra |
+|----------|----------------|-----------|
+| `get_todo` | `TodosRead` (authenticated) | — |
+| `create_todo` / `delete_todo` | `TodosAdmin` (Admin role) | — |
+| `get_analytics_summary` | `[AllowAnonymous]` | `Roles = ["Analyst"]` on MCP |
+
+`.WithMcpExpose(..., roles: ["Analyst"])` enforces roles even when the HTTP endpoint allows anonymous access.
+
 ## OpenAPI MCP resource
 
 By default, DotnetMcp exposes a generated OpenAPI 3 document for MCP-exposed endpoints:
@@ -158,7 +186,7 @@ builder.Services.AddDotnetMcp(options =>
     options.EnableOpenApiResource = true;
     options.OpenApiResourceUri = "openapi://myapp/v1";
     options.OpenApiTitle = "My App API";
-    options.OpenApiVersion = "0.1.3-alpha";
+    options.OpenApiVersion = "1.0.0-rc.1";
 });
 ```
 
@@ -207,7 +235,7 @@ builder.Services.AddDotnetMcp(options =>
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `ExposureMode` | `OptOut` | `OptIn` exposes only annotated endpoints; `OptOut` exposes all except ignored |
+| `ExposureMode` | `OptIn` | `OptIn` exposes only annotated endpoints; `OptOut` exposes all except ignored |
 | `RequireExplicitAnnotation` | `false` | When `OptOut`, require `[McpExpose]` / `[McpExposeAll]` / `.WithMcpExpose()` |
 | `MapHttpMethods` | `true` | Prefix auto-generated tool names with the HTTP method (e.g. `get_users_by_id`) |
 | `ToolNamePrefix` | `""` | Prefix applied to all tool names |
@@ -391,7 +419,8 @@ dotnet-mcp/
 │   └── DotnetMcp.AspNetCore/     # MCP server wiring and invocation
 ├── samples/
 │   ├── TodoApi.Minimal/          # HTTP MCP sample
-│   └── TodoApi.Stdio/            # stdio MCP sample
+│   ├── TodoApi.Stdio/            # stdio MCP sample
+│   └── TodoApi.Auth/             # JWT + policy sample
 ├── tests/
 │   ├── DotnetMcp.Tests/          # Unit tests
 │   └── DotnetMcp.AspNetCore.Tests/  # Integration tests
@@ -415,6 +444,7 @@ Run samples:
 ```bash
 dotnet run --project samples/TodoApi.Minimal
 dotnet run --project samples/TodoApi.Stdio
+dotnet run --project samples/TodoApi.Auth
 ```
 
 Pack locally:
@@ -424,6 +454,23 @@ dotnet pack src/DotnetMcp.AspNetCore/DotnetMcp.AspNetCore.csproj -c Release -o a
 ```
 
 ## Releases
+
+### `1.0.0-rc.1`
+
+Release candidate toward stable 1.0.
+
+**Includes / changes:**
+
+- Default `ExposureMode` is now **`OptIn`** (breaking vs earlier alphas that defaulted to `OptOut`)
+- Auth policy sample (`samples/TodoApi.Auth`) with JWT + ASP.NET policies + MCP roles
+- `.WithMcpExpose(..., roles:)` support for Minimal APIs
+- Phase 2 features: auth enforcement, stdio, OpenAPI resource
+
+**Install:**
+
+```bash
+dotnet add package DotnetMcp.AspNetCore --version 1.0.0-rc.1
+```
 
 ### `0.1.3-alpha`
 
@@ -493,16 +540,29 @@ First public pre-release on NuGet.
 Maintainers: bump `Version` in root `Directory.Build.props`, merge to `main`, then tag and push:
 
 ```bash
-git tag v0.1.3-alpha
-git push origin v0.1.3-alpha
+git tag v1.0.0-rc.1
+git push origin v1.0.0-rc.1
 ```
 
 The [Publish NuGet](.github/workflows/publish.yml) workflow runs on `v*` tags, uses the `production` GitHub environment, and pushes all three packages to nuget.org.
 
+## Public API (1.0 surface)
+
+Stable entry points for application authors:
+
+| API | Purpose |
+|-----|---------|
+| `AddDotnetMcp(Action<DotnetMcpOptions>?)` | Register discovery, MCP handlers, transport |
+| `MapDotnetMcp(string pattern = "/mcp")` | Map HTTP MCP endpoint (no-op for stdio) |
+| `UseDotnetMcpStdioLogging()` | stderr logging for stdio hosts |
+| `.WithMcpExpose(...)` | Expose Minimal API endpoints |
+| `[McpExpose]` / `[McpIgnore]` / `[McpExposeAll]` | Controller annotations |
+| `DotnetMcpOptions` | Exposure, transport, auth, OpenAPI settings |
+
 ## Roadmap
 
-- **Phase 2 complete:** auth enforcement, stdio transport, OpenAPI MCP resource
-- **Next:** richer auth policy samples, API surface review toward stable `1.0.0`
+- **`1.0.0`:** finalize RC feedback, then tag stable without `-rc`
+- Optional later: multi-document OpenAPI, richer resource templates
 
 ## Contributing
 

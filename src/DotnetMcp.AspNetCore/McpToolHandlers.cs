@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DotnetMcp;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -43,28 +44,34 @@ internal sealed class McpToolHandlers
         });
     }
 
-    public async ValueTask<CallToolResponse> CallToolAsync(
+    public async ValueTask<CallToolResult> CallToolAsync(
         RequestContext<CallToolRequestParams> context,
         CancellationToken cancellationToken)
     {
         var toolName = context.Params?.Name;
         if (string.IsNullOrWhiteSpace(toolName))
         {
-            throw new McpException("Tool name is required.", McpErrorCode.InvalidParams);
+            throw new McpException("Tool name is required.");
         }
 
         var tool = _toolCatalog.FindByName(toolName);
         if (tool is null)
         {
-            throw new McpException($"Tool '{toolName}' was not found.", McpErrorCode.InvalidParams);
+            throw new McpException($"Tool '{toolName}' was not found.");
         }
 
         var requestServices = context.Services ?? throw new InvalidOperationException("Server services are unavailable.");
         var httpContext = requestServices.GetService<IHttpContextAccessor>()?.HttpContext;
 
+        IReadOnlyDictionary<string, JsonElement>? arguments = null;
+        if (context.Params?.Arguments is { } rawArguments)
+        {
+            arguments = new Dictionary<string, JsonElement>(rawArguments);
+        }
+
         return await _endpointInvoker.InvokeAsync(
             tool,
-            context.Params?.Arguments,
+            arguments,
             httpContext,
             requestServices,
             cancellationToken);

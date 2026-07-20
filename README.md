@@ -2,7 +2,7 @@
 
 A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server. AI assistants and agents can discover your endpoints as MCP tools, inspect JSON Schema for parameters, and invoke them over HTTP with minimal configuration.
 
-**Current release:** [`1.0.0-rc.1`](https://www.nuget.org/packages/DotnetMcp.AspNetCore/1.0.0-rc.1) (release candidate)
+**Current release:** [`1.0.0`](https://www.nuget.org/packages/DotnetMcp.AspNetCore/1.0.0)
 
 ## Features
 
@@ -35,7 +35,7 @@ A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Pro
 ### 1. Install
 
 ```bash
-dotnet add package DotnetMcp.AspNetCore --version 1.0.0-rc.1
+dotnet add package DotnetMcp.AspNetCore --version 1.0.0
 ```
 
 ### 2. Register services and map the MCP endpoint
@@ -76,15 +76,15 @@ The MCP server is available at `/mcp` (default). Use any MCP client that support
 using ModelContextProtocol.Client;
 
 var httpClient = new HttpClient { BaseAddress = new Uri("https://localhost:5001") };
-var transport = new SseClientTransport(
-    new SseClientTransportOptions
+var transport = new HttpClientTransport(
+    new HttpClientTransportOptions
     {
         Endpoint = new Uri(httpClient.BaseAddress!, "/mcp"),
-        UseStreamableHttp = true
+        TransportMode = HttpTransportMode.StreamableHttp
     },
     httpClient);
 
-await using var client = await McpClientFactory.CreateAsync(transport);
+await using var client = await McpClient.CreateAsync(transport);
 
 var tools = await client.ListToolsAsync();
 var result = await client.CallToolAsync("get_todo", new Dictionary<string, object?> { ["id"] = 1 });
@@ -186,7 +186,7 @@ builder.Services.AddDotnetMcp(options =>
     options.EnableOpenApiResource = true;
     options.OpenApiResourceUri = "openapi://myapp/v1";
     options.OpenApiTitle = "My App API";
-    options.OpenApiVersion = "1.0.0-rc.1";
+    options.OpenApiVersion = "1.0.0";
 });
 ```
 
@@ -455,6 +455,28 @@ dotnet pack src/DotnetMcp.AspNetCore/DotnetMcp.AspNetCore.csproj -c Release -o a
 
 ## Releases
 
+### `1.0.0`
+
+First stable release.
+
+**Includes:**
+
+- Opt-in-by-default endpoint exposure (`McpExposureMode.OptIn`)
+- HTTP (streamable) and stdio MCP transports
+- Authorization enforcement for `[Authorize]`, policies, and MCP roles
+- OpenAPI 3 document as an MCP resource
+- Samples: Minimal (HTTP), Stdio, Auth (JWT + policies)
+- `.WithMcpExpose(..., roles:)` for Minimal APIs
+- Built on stable **ModelContextProtocol.AspNetCore 1.4.1** (no preview MCP dependency)
+
+**Install:**
+
+```bash
+dotnet add package DotnetMcp.AspNetCore --version 1.0.0
+```
+
+**Breaking vs early alphas:** default `ExposureMode` is `OptIn` (was `OptOut` before `1.0.0-rc.1`).
+
 ### `1.0.0-rc.1`
 
 Release candidate toward stable 1.0.
@@ -540,9 +562,18 @@ First public pre-release on NuGet.
 Maintainers: bump `Version` in root `Directory.Build.props`, merge to `main`, then tag and push:
 
 ```bash
-git tag v1.0.0-rc.1
-git push origin v1.0.0-rc.1
+git tag v1.0.0
+git push origin v1.0.0
 ```
+
+> If `v1.0.0` was previously pushed on an RC commit, delete and recreate the tag on the stable commit before publishing:
+>
+> ```bash
+> git tag -d v1.0.0
+> git push origin :refs/tags/v1.0.0
+> git tag v1.0.0
+> git push origin v1.0.0
+> ```
 
 The [Publish NuGet](.github/workflows/publish.yml) workflow runs on `v*` tags, uses the `production` GitHub environment, and pushes all three packages to nuget.org.
 
@@ -561,8 +592,8 @@ Stable entry points for application authors:
 
 ## Roadmap
 
-- **`1.0.0`:** finalize RC feedback, then tag stable without `-rc`
-- Optional later: multi-document OpenAPI, richer resource templates
+- Stable **1.0.0** is the current supported line
+- Optional later: multi-document OpenAPI, OIDC/Entra sample, richer resource templates
 
 ## Contributing
 

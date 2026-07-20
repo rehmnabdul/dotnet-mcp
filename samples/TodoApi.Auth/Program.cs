@@ -42,7 +42,7 @@ builder.Services.AddDotnetMcp(options =>
 {
     options.ExposureMode = McpExposureMode.OptIn;
     options.OpenApiTitle = "Todo API (Auth Sample)";
-    options.OpenApiVersion = "1.0.0-rc.1";
+    options.OpenApiVersion = "1.0.0";
 });
 
 var app = builder.Build();

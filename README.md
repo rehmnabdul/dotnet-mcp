@@ -2,7 +2,7 @@
 
 A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server. AI assistants and agents can discover your endpoints as MCP tools, inspect JSON Schema for parameters, and invoke them over HTTP with minimal configuration.
 
-**Current release:** [`0.1.2-alpha`](https://www.nuget.org/packages/DotnetMcp.AspNetCore/0.1.2-alpha) (pre-release)
+**Current release:** [`0.1.3-alpha`](https://www.nuget.org/packages/DotnetMcp.AspNetCore/0.1.3-alpha) (pre-release)
 
 ## Features
 
@@ -11,6 +11,7 @@ A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Pro
 - **JSON Schema generation** — tool input schemas are built from route, query, and body parameters
 - **In-process invocation** — MCP tool calls dispatch through the same endpoint pipeline as normal HTTP requests
 - **HTTP and stdio transports** — streamable HTTP/SSE for remote hosts, or stdin/stdout for local IDE/CLI agents
+- **OpenAPI MCP resource** — generated OpenAPI 3 document for exposed endpoints via `resources/list` / `resources/read`
 - **Auth enforcement** — `[Authorize]`, policies, roles, and `[McpExpose(Roles = ...)]` are checked on tool calls
 - **Auth forwarding** — `Authorization` headers and the authenticated `User` from the MCP request are forwarded to invoked endpoints
 
@@ -34,7 +35,7 @@ A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Pro
 ### 1. Install
 
 ```bash
-dotnet add package DotnetMcp.AspNetCore --version 0.1.2-alpha
+dotnet add package DotnetMcp.AspNetCore --version 0.1.3-alpha
 ```
 
 ### 2. Register services and map the MCP endpoint
@@ -140,6 +141,27 @@ Example MCP host config (Cursor / Claude Desktop style):
 }
 ```
 
+## OpenAPI MCP resource
+
+By default, DotnetMcp exposes a generated OpenAPI 3 document for MCP-exposed endpoints:
+
+```csharp
+var resources = await client.ListResourcesAsync();
+var openApi = await client.ReadResourceAsync("openapi://dotnet-mcp/document");
+```
+
+Disable or customize:
+
+```csharp
+builder.Services.AddDotnetMcp(options =>
+{
+    options.EnableOpenApiResource = true;
+    options.OpenApiResourceUri = "openapi://myapp/v1";
+    options.OpenApiTitle = "My App API";
+    options.OpenApiVersion = "0.1.3-alpha";
+});
+```
+
 ## How it works
 
 ```
@@ -194,6 +216,9 @@ builder.Services.AddDotnetMcp(options =>
 | `Filter` | `null` | Additional predicate over `EndpointDescriptor` |
 | `EnforceEndpointAuthorization` | `true` | Enforce `[Authorize]` / roles on MCP tool calls |
 | `Transport` | `Http` | `Http` for `MapDotnetMcp`, or `Stdio` for local stdin/stdout hosts |
+| `EnableOpenApiResource` | `true` | Expose a generated OpenAPI 3 document as an MCP resource |
+| `OpenApiResourceUri` | `openapi://dotnet-mcp/document` | URI used in `resources/list` and `resources/read` |
+| `OpenApiTitle` / `OpenApiVersion` | `dotnet-mcp` / `1.0.0` | OpenAPI `info` fields |
 
 ## Exposing endpoints
 
@@ -400,6 +425,22 @@ dotnet pack src/DotnetMcp.AspNetCore/DotnetMcp.AspNetCore.csproj -c Release -o a
 
 ## Releases
 
+### `0.1.3-alpha`
+
+OpenAPI document as an MCP resource.
+
+**Includes:**
+
+- Generated OpenAPI 3.0 document from MCP-exposed endpoints
+- `resources/list` + `resources/read` handlers (`openapi://dotnet-mcp/document`)
+- Options: `EnableOpenApiResource`, `OpenApiResourceUri`, `OpenApiTitle`, `OpenApiVersion`
+
+**Install:**
+
+```bash
+dotnet add package DotnetMcp.AspNetCore --version 0.1.3-alpha
+```
+
 ### `0.1.2-alpha`
 
 Stdio transport for local MCP hosts.
@@ -452,16 +493,16 @@ First public pre-release on NuGet.
 Maintainers: bump `Version` in root `Directory.Build.props`, merge to `main`, then tag and push:
 
 ```bash
-git tag v0.1.2-alpha
-git push origin v0.1.2-alpha
+git tag v0.1.3-alpha
+git push origin v0.1.3-alpha
 ```
 
 The [Publish NuGet](.github/workflows/publish.yml) workflow runs on `v*` tags, uses the `production` GitHub environment, and pushes all three packages to nuget.org.
 
 ## Roadmap
 
-- **Phase 2 (remaining):** OpenAPI MCP resource, richer policy samples
-- **Stable 1.0:** API surface review and final documentation pass
+- **Phase 2 complete:** auth enforcement, stdio transport, OpenAPI MCP resource
+- **Next:** richer auth policy samples, API surface review toward stable `1.0.0`
 
 ## Contributing
 

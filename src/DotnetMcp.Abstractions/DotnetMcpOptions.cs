@@ -27,4 +27,29 @@ public class DotnetMcpOptions
     /// Set to <see cref="McpTransportMode.Stdio"/> for local agent/CLI hosts.
     /// </summary>
     public McpTransportMode Transport { get; set; } = McpTransportMode.Http;
+
+    /// <summary>
+    /// When true, exposes a generated OpenAPI 3 document as an MCP resource.
+    /// </summary>
+    public bool EnableOpenApiResource { get; set; } = true;
+
+    /// <summary>
+    /// URI of the OpenAPI MCP resource.
+    /// </summary>
+    public string OpenApiResourceUri { get; set; } = "openapi://dotnet-mcp/document";
+
+    /// <summary>
+    /// Display name of the OpenAPI MCP resource.
+    /// </summary>
+    public string OpenApiResourceName { get; set; } = "OpenAPI Document";
+
+    /// <summary>
+    /// OpenAPI <c>info.title</c>.
+    /// </summary>
+    public string OpenApiTitle { get; set; } = "dotnet-mcp";
+
+    /// <summary>
+    /// OpenAPI <c>info.version</c>.
+    /// </summary>
+    public string OpenApiVersion { get; set; } = "1.0.0";
 }

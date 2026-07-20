@@ -40,10 +40,12 @@ public static class DotnetMcpServiceCollectionExtensions
 
         services.TryAddSingleton<ToolSchemaGenerator>();
         services.TryAddSingleton<McpToolCatalog>();
+        services.TryAddSingleton<OpenApiDocumentGenerator>();
         services.TryAddSingleton<IEndpointDiscoveryService, EndpointDiscoveryService>();
         services.TryAddSingleton<McpEndpointAuthorizationEvaluator>();
         services.TryAddSingleton<McpEndpointInvoker>();
         services.TryAddSingleton<McpToolHandlers>();
+        services.TryAddSingleton<McpResourceHandlers>();
 
         services.AddHttpContextAccessor();
 
@@ -78,6 +80,21 @@ public static class DotnetMcpServiceCollectionExtensions
                 var handlers = context.Services!.GetRequiredService<McpToolHandlers>();
                 return handlers.CallToolAsync(context, cancellationToken);
             });
+
+        if (options.EnableOpenApiResource)
+        {
+            mcpServer
+                .WithListResourcesHandler((context, cancellationToken) =>
+                {
+                    var handlers = context.Services!.GetRequiredService<McpResourceHandlers>();
+                    return handlers.ListResourcesAsync(context, cancellationToken);
+                })
+                .WithReadResourceHandler((context, cancellationToken) =>
+                {
+                    var handlers = context.Services!.GetRequiredService<McpResourceHandlers>();
+                    return handlers.ReadResourceAsync(context, cancellationToken);
+                });
+        }
 
         return services;
     }

@@ -2,7 +2,7 @@
 
 A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server. AI assistants and agents can discover your endpoints as MCP tools, inspect JSON Schema for parameters, and invoke them over HTTP with minimal configuration.
 
-**Current release:** [`0.1.1-alpha`](https://www.nuget.org/packages/DotnetMcp.AspNetCore/0.1.1-alpha) (pre-release)
+**Current release:** [`0.1.2-alpha`](https://www.nuget.org/packages/DotnetMcp.AspNetCore/0.1.2-alpha) (pre-release)
 
 ## Features
 
@@ -10,7 +10,7 @@ A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Pro
 - **Opt-in or opt-out exposure** — expose only annotated endpoints, or expose everything except ignored ones
 - **JSON Schema generation** — tool input schemas are built from route, query, and body parameters
 - **In-process invocation** — MCP tool calls dispatch through the same endpoint pipeline as normal HTTP requests
-- **HTTP transport** — MCP over streamable HTTP/SSE via the official `ModelContextProtocol.AspNetCore` SDK
+- **HTTP and stdio transports** — streamable HTTP/SSE for remote hosts, or stdin/stdout for local IDE/CLI agents
 - **Auth enforcement** — `[Authorize]`, policies, roles, and `[McpExpose(Roles = ...)]` are checked on tool calls
 - **Auth forwarding** — `Authorization` headers and the authenticated `User` from the MCP request are forwarded to invoked endpoints
 
@@ -34,7 +34,7 @@ A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Pro
 ### 1. Install
 
 ```bash
-dotnet add package DotnetMcp.AspNetCore --version 0.1.1-alpha
+dotnet add package DotnetMcp.AspNetCore --version 0.1.2-alpha
 ```
 
 ### 2. Register services and map the MCP endpoint
@@ -95,6 +95,51 @@ Run the included sample to try it locally:
 dotnet run --project samples/TodoApi.Minimal
 ```
 
+## Stdio transport (local agents)
+
+For IDE / CLI MCP hosts that launch a local process, use stdin/stdout instead of HTTP:
+
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+builder.UseDotnetMcpStdioLogging(); // logs must go to stderr
+builder.WebHost.UseUrls("http://127.0.0.1:0");
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddDotnetMcp(options =>
+{
+    options.ExposureMode = McpExposureMode.OptIn;
+    options.Transport = McpTransportMode.Stdio;
+});
+
+var app = builder.Build();
+
+app.MapGet("/api/todos/{id}", (int id) => Results.Ok(new { id, title = "Learn MCP" }))
+   .WithMcpExpose("get_todo", "Get todo by id", readOnly: true);
+
+app.MapDotnetMcp(); // no-op for stdio; kept for shared startup code
+app.Run();
+```
+
+Sample:
+
+```bash
+dotnet run --project samples/TodoApi.Stdio
+```
+
+Example MCP host config (Cursor / Claude Desktop style):
+
+```json
+{
+  "mcpServers": {
+    "todo-api": {
+      "command": "dotnet",
+      "args": ["run", "--project", "/absolute/path/to/samples/TodoApi.Stdio"]
+    }
+  }
+}
+```
+
 ## How it works
 
 ```
@@ -117,8 +162,8 @@ dotnet run --project samples/TodoApi.Minimal
                                               └─────────────────────┘
 ```
 
-1. **`AddDotnetMcp()`** registers discovery, schema generation, and MCP server handlers.
-2. **`MapDotnetMcp("/mcp")`** maps the MCP HTTP endpoint using the official MCP ASP.NET Core SDK.
+1. **`AddDotnetMcp()`** registers discovery, schema generation, and MCP server handlers for HTTP or stdio.
+2. **`MapDotnetMcp("/mcp")`** maps the MCP HTTP endpoint (skipped automatically when `Transport = Stdio`).
 3. On **`tools/list`**, exposed endpoints are returned as MCP tools with JSON Schema input definitions.
 4. On **`tools/call`**, arguments are mapped to route, query, and body parameters and the matching endpoint is invoked in-process.
 
@@ -148,6 +193,7 @@ builder.Services.AddDotnetMcp(options =>
 | `McpRoutePattern` | `"/mcp"` | Documented default route pattern (map with `MapDotnetMcp`) |
 | `Filter` | `null` | Additional predicate over `EndpointDescriptor` |
 | `EnforceEndpointAuthorization` | `true` | Enforce `[Authorize]` / roles on MCP tool calls |
+| `Transport` | `Http` | `Http` for `MapDotnetMcp`, or `Stdio` for local stdin/stdout hosts |
 
 ## Exposing endpoints
 
@@ -319,7 +365,8 @@ dotnet-mcp/
 │   ├── DotnetMcp/                # Discovery, filtering, schemas (NuGet: DotnetMcp.Core)
 │   └── DotnetMcp.AspNetCore/     # MCP server wiring and invocation
 ├── samples/
-│   └── TodoApi.Minimal/          # Reference Minimal API app
+│   ├── TodoApi.Minimal/          # HTTP MCP sample
+│   └── TodoApi.Stdio/            # stdio MCP sample
 ├── tests/
 │   ├── DotnetMcp.Tests/          # Unit tests
 │   └── DotnetMcp.AspNetCore.Tests/  # Integration tests
@@ -338,10 +385,11 @@ dotnet build -c Release
 dotnet test -c Release
 ```
 
-Run the sample:
+Run samples:
 
 ```bash
 dotnet run --project samples/TodoApi.Minimal
+dotnet run --project samples/TodoApi.Stdio
 ```
 
 Pack locally:
@@ -351,6 +399,23 @@ dotnet pack src/DotnetMcp.AspNetCore/DotnetMcp.AspNetCore.csproj -c Release -o a
 ```
 
 ## Releases
+
+### `0.1.2-alpha`
+
+Stdio transport for local MCP hosts.
+
+**Includes:**
+
+- `McpTransportMode.Stdio` / `DotnetMcpOptions.Transport`
+- `UseDotnetMcpStdioLogging()` helper (stderr logging)
+- `samples/TodoApi.Stdio` and stdio integration test
+- `MapDotnetMcp` is a no-op when transport is stdio
+
+**Install:**
+
+```bash
+dotnet add package DotnetMcp.AspNetCore --version 0.1.2-alpha
+```
 
 ### `0.1.1-alpha`
 
@@ -387,15 +452,15 @@ First public pre-release on NuGet.
 Maintainers: bump `Version` in root `Directory.Build.props`, merge to `main`, then tag and push:
 
 ```bash
-git tag v0.1.1-alpha
-git push origin v0.1.1-alpha
+git tag v0.1.2-alpha
+git push origin v0.1.2-alpha
 ```
 
 The [Publish NuGet](.github/workflows/publish.yml) workflow runs on `v*` tags, uses the `production` GitHub environment, and pushes all three packages to nuget.org.
 
 ## Roadmap
 
-- **Phase 2 (remaining):** stdio transport, OpenAPI MCP resource, richer policy samples
+- **Phase 2 (remaining):** OpenAPI MCP resource, richer policy samples
 - **Stable 1.0:** API surface review and final documentation pass
 
 ## Contributing

@@ -1,19 +1,43 @@
-# dotnet-mcp
+# DotnetMcp
 
-A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server. AI assistants and agents can discover your endpoints as MCP tools, inspect JSON Schema for parameters, and invoke them over HTTP with minimal configuration.
+[![NuGet](https://img.shields.io/nuget/v/DotnetMcp.AspNetCore.svg)](https://www.nuget.org/packages/DotnetMcp.AspNetCore)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+Expose ASP.NET Core APIs as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server. AI assistants and agents discover your endpoints as tools, get JSON Schema for parameters, and invoke them over **HTTP** or **stdio** — with the same authorization rules as your normal API.
 
 **Current release:** [`1.0.0`](https://www.nuget.org/packages/DotnetMcp.AspNetCore/1.0.0)
 
+## Contents
+
+- [Features](#features)
+- [Packages](#packages)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Transports](#transports)
+- [Authorization](#authorization)
+- [OpenAPI resource](#openapi-resource)
+- [Configuration](#configuration)
+- [Exposing endpoints](#exposing-endpoints)
+- [Tool naming & schemas](#tool-naming--schemas)
+- [How it works](#how-it-works)
+- [Troubleshooting](#troubleshooting)
+- [Building from source](#building-from-source)
+- [Releases](#releases)
+- [Public API](#public-api-10-surface)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Features
 
-- **Automatic tool discovery** — uses ASP.NET Core API Explorer to discover Minimal API and controller endpoints
-- **Opt-in or opt-out exposure** — expose only annotated endpoints, or expose everything except ignored ones
-- **JSON Schema generation** — tool input schemas are built from route, query, and body parameters
-- **In-process invocation** — MCP tool calls dispatch through the same endpoint pipeline as normal HTTP requests
-- **HTTP and stdio transports** — streamable HTTP/SSE for remote hosts, or stdin/stdout for local IDE/CLI agents
-- **OpenAPI MCP resource** — generated OpenAPI 3 document for exposed endpoints via `resources/list` / `resources/read`
-- **Auth enforcement** — `[Authorize]`, policies, roles, and `[McpExpose(Roles = ...)]` are checked on tool calls
-- **Auth forwarding** — `Authorization` headers and the authenticated `User` from the MCP request are forwarded to invoked endpoints
+- **Automatic discovery** — Minimal APIs and controllers via API Explorer
+- **Opt-in by default** — only annotated endpoints become tools (`OptOut` available)
+- **JSON Schema inputs** — from route, query, and body parameters
+- **In-process invocation** — tool calls go through the same endpoint handlers as HTTP
+- **HTTP + stdio** — remote hosts over streamable HTTP, or local IDE/CLI agents over stdin/stdout
+- **OpenAPI MCP resource** — generated OpenAPI 3 doc for exposed endpoints
+- **Auth enforcement** — `[Authorize]`, policies, roles, and MCP-only role hints
+- **Auth forwarding** — `Authorization` header and authenticated `User` are copied onto invocations
 
 ## Packages
 
@@ -28,7 +52,9 @@ A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Pro
 ## Requirements
 
 - .NET 8.0+
-- ASP.NET Core with API Explorer enabled (`AddEndpointsApiExplorer()` for Minimal APIs, or `AddControllers()` / `AddMvcCore().AddApiExplorer()` for controllers)
+- ASP.NET Core with API Explorer enabled:
+  - Minimal APIs: `AddEndpointsApiExplorer()`
+  - Controllers: `AddControllers()` or `AddMvcCore().AddApiExplorer()`
 
 ## Quick start
 
@@ -38,19 +64,15 @@ A .NET library that exposes your ASP.NET Core APIs as an [MCP (Model Context Pro
 dotnet add package DotnetMcp.AspNetCore --version 1.0.0
 ```
 
-### 2. Register services and map the MCP endpoint
+### 2. Register and map
 
 ```csharp
-using DotnetMcp.Abstractions;
 using DotnetMcp.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddDotnetMcp(options =>
-{
-    options.ExposureMode = McpExposureMode.OptIn;
-});
+builder.Services.AddDotnetMcp(); // ExposureMode defaults to OptIn
 
 var app = builder.Build();
 
@@ -62,15 +84,14 @@ app.MapPost("/api/todos", (CreateTodoRequest request) =>
    .WithMcpExpose("create_todo", "Create a todo");
 
 app.MapDotnetMcp("/mcp");
-
 app.Run();
 
 public sealed record CreateTodoRequest(string Title);
 ```
 
-### 3. Connect an MCP client
+### 3. Connect a client
 
-The MCP server is available at `/mcp` (default). Use any MCP client that supports HTTP/SSE transport, for example the official .NET client:
+MCP is available at `/mcp` by default. Example with the official .NET MCP client:
 
 ```csharp
 using ModelContextProtocol.Client;
@@ -90,26 +111,36 @@ var tools = await client.ListToolsAsync();
 var result = await client.CallToolAsync("get_todo", new Dictionary<string, object?> { ["id"] = 1 });
 ```
 
-Run the included sample to try it locally:
+Try the sample:
 
 ```bash
 dotnet run --project samples/TodoApi.Minimal
 ```
 
-## Stdio transport (local agents)
+## Transports
 
-For IDE / CLI MCP hosts that launch a local process, use stdin/stdout instead of HTTP:
+| Transport | When to use | How to enable |
+|-----------|-------------|---------------|
+| **HTTP** (default) | Remote agents, web apps, shared hosts | `MapDotnetMcp("/mcp")` |
+| **Stdio** | Local IDE / CLI hosts (Cursor, Claude Desktop, etc.) | `options.Transport = McpTransportMode.Stdio` |
+
+### HTTP (default)
+
+No extra transport config — map the endpoint and point an MCP client at it.
+
+### Stdio (local agents)
+
+Logs must go to **stderr** so stdout stays clean for the MCP protocol:
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
 
-builder.UseDotnetMcpStdioLogging(); // logs must go to stderr
+builder.UseDotnetMcpStdioLogging();
 builder.WebHost.UseUrls("http://127.0.0.1:0");
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddDotnetMcp(options =>
 {
-    options.ExposureMode = McpExposureMode.OptIn;
     options.Transport = McpTransportMode.Stdio;
 });
 
@@ -118,7 +149,7 @@ var app = builder.Build();
 app.MapGet("/api/todos/{id}", (int id) => Results.Ok(new { id, title = "Learn MCP" }))
    .WithMcpExpose("get_todo", "Get todo by id", readOnly: true);
 
-app.MapDotnetMcp(); // no-op for stdio; kept for shared startup code
+app.MapDotnetMcp(); // no-op for stdio; safe to keep for shared startup
 app.Run();
 ```
 
@@ -141,15 +172,47 @@ Example MCP host config (Cursor / Claude Desktop style):
 }
 ```
 
-## Auth policy sample
+## Authorization
 
-`samples/TodoApi.Auth` shows JWT Bearer auth with ASP.NET policies and MCP role checks:
+MCP tool calls are invoked in-process, outside the target endpoint’s normal HTTP middleware pipeline. DotnetMcp enforces authorization explicitly before invocation:
+
+1. Endpoint `[Authorize]` / policy / role metadata (unless `[AllowAnonymous]`)
+2. `[McpExpose(Roles = ...)]` / `.WithMcpExpose(..., roles:)` (always enforced when set)
+3. The MCP request’s authenticated `User` and `Authorization` header are copied onto the in-process call
+
+```csharp
+[HttpGet("admin/report")]
+[Authorize(Roles = "Admin")]
+[McpExpose(Name = "get_admin_report", Description = "Admin-only report")]
+public IActionResult AdminReport() => Ok(new { ok = true });
+
+// MCP-only roles even when HTTP allows anonymous:
+[HttpGet("stats")]
+[AllowAnonymous]
+[McpExpose(Name = "get_stats", Roles = new[] { "Analyst" })]
+public IActionResult Stats() => Ok();
+```
+
+Your app still needs standard ASP.NET Core auth (`AddAuthentication`, `AddAuthorization`, `UseAuthentication`).
+
+To disable enforcement (not recommended):
+
+```csharp
+builder.Services.AddDotnetMcp(options =>
+{
+    options.EnforceEndpointAuthorization = false;
+});
+```
+
+### Auth policy sample
+
+`samples/TodoApi.Auth` demonstrates JWT Bearer auth with ASP.NET policies and MCP roles:
 
 ```bash
 dotnet run --project samples/TodoApi.Auth
 ```
 
-1. Mint a token:
+Mint a token:
 
 ```bash
 curl -s http://localhost:5000/auth/token \
@@ -157,19 +220,15 @@ curl -s http://localhost:5000/auth/token \
   -d '{"username":"ada","role":"Admin"}'
 ```
 
-2. Call MCP tools with `Authorization: Bearer <token>` on the MCP HTTP client.
+Then call MCP tools with `Authorization: Bearer <token>` on the MCP HTTP client.
 
-What it demonstrates:
-
-| Endpoint | ASP.NET policy | MCP extra |
-|----------|----------------|-----------|
+| Tool | ASP.NET policy | MCP extra |
+|------|----------------|-----------|
 | `get_todo` | `TodosRead` (authenticated) | — |
 | `create_todo` / `delete_todo` | `TodosAdmin` (Admin role) | — |
 | `get_analytics_summary` | `[AllowAnonymous]` | `Roles = ["Analyst"]` on MCP |
 
-`.WithMcpExpose(..., roles: ["Analyst"])` enforces roles even when the HTTP endpoint allows anonymous access.
-
-## OpenAPI MCP resource
+## OpenAPI resource
 
 By default, DotnetMcp exposes a generated OpenAPI 3 document for MCP-exposed endpoints:
 
@@ -178,7 +237,7 @@ var resources = await client.ListResourcesAsync();
 var openApi = await client.ReadResourceAsync("openapi://dotnet-mcp/document");
 ```
 
-Disable or customize:
+Customize or disable:
 
 ```csharp
 builder.Services.AddDotnetMcp(options =>
@@ -189,6 +248,166 @@ builder.Services.AddDotnetMcp(options =>
     options.OpenApiVersion = "1.0.0";
 });
 ```
+
+## Configuration
+
+```csharp
+builder.Services.AddDotnetMcp(options =>
+{
+    options.ExposureMode = McpExposureMode.OptIn;
+    options.MapHttpMethods = true;
+    options.ToolNamePrefix = "myapp";
+    options.ExcludePaths = new[] { "internal/", "health" };
+    options.McpRoutePattern = "/mcp";
+    options.Filter = descriptor => !descriptor.Route.Contains("admin");
+});
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `ExposureMode` | `OptIn` | `OptIn` = annotated only; `OptOut` = all except ignored |
+| `RequireExplicitAnnotation` | `false` | When `OptOut`, still require explicit expose annotations |
+| `MapHttpMethods` | `true` | Prefix auto-generated names with HTTP method (e.g. `get_users_by_id`) |
+| `ToolNamePrefix` | `""` | Prefix applied to all tool names |
+| `ExcludePaths` | `[]` | Path prefixes never exposed (case-insensitive) |
+| `McpRoutePattern` | `"/mcp"` | Documented default route (map with `MapDotnetMcp`) |
+| `Filter` | `null` | Extra predicate over `EndpointDescriptor` |
+| `EnforceEndpointAuthorization` | `true` | Enforce `[Authorize]` / roles on tool calls |
+| `Transport` | `Http` | `Http` or `Stdio` |
+| `EnableOpenApiResource` | `true` | Expose generated OpenAPI 3 as an MCP resource |
+| `OpenApiResourceUri` | `openapi://dotnet-mcp/document` | URI for `resources/list` / `resources/read` |
+| `OpenApiTitle` / `OpenApiVersion` | `dotnet-mcp` / `1.0.0` | OpenAPI `info` fields |
+
+## Exposing endpoints
+
+### Exposure modes
+
+**Opt-in (default — recommended for production)**
+
+Only endpoints you mark are tools:
+
+```csharp
+options.ExposureMode = McpExposureMode.OptIn;
+```
+
+**Opt-out**
+
+Expose everything discovered except ignored/excluded paths:
+
+```csharp
+options.ExposureMode = McpExposureMode.OptOut;
+options.ExcludePaths = new[] { "health", "internal/" };
+```
+
+### Minimal APIs — `.WithMcpExpose()`
+
+```csharp
+app.MapDelete("/api/todos/{id}", (int id) => Results.NoContent())
+   .WithMcpExpose("delete_todo", "Delete a todo", destructive: true);
+
+app.MapGet("/api/analytics/summary", () => Results.Ok())
+   .WithMcpExpose("get_analytics_summary", "Analytics summary", roles: new[] { "Analyst" });
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `name` | Explicit MCP tool name (recommended) |
+| `description` | Shown to clients in `tools/list` |
+| `readOnly` | MCP read-only hint (defaults from GET/HEAD) |
+| `destructive` | MCP destructive hint (defaults to `true` for DELETE) |
+| `roles` | Extra roles required for MCP calls (even if HTTP is anonymous) |
+
+### Controllers — `[McpExpose]`
+
+```csharp
+[ApiController]
+[Route("api/[controller]")]
+public class UsersController : ControllerBase
+{
+    [HttpGet("{id}")]
+    [McpExpose(Description = "Get user by id", ReadOnly = true)]
+    public IActionResult Get(string id) => Ok(new { id, name = "Ada" });
+
+    [HttpPost]
+    [McpExpose(Description = "Create user")]
+    public IActionResult Create([FromBody] CreateUserRequest request) =>
+        Created(string.Empty, request);
+}
+```
+
+### Hide endpoints — `[McpIgnore]`
+
+```csharp
+[HttpGet("health")]
+[McpIgnore]
+public IActionResult Health() => Ok();
+```
+
+Apply to a controller class to ignore all its actions.
+
+### Expose all actions — `[McpExposeAll]`
+
+```csharp
+[McpExposeAll]
+[ApiController]
+[Route("api/[controller]")]
+public class ReportsController : ControllerBase
+{
+    // All actions are exposed unless individually ignored
+}
+```
+
+## Tool naming & schemas
+
+### Naming
+
+When no explicit name is provided, names come from the HTTP method and route:
+
+| Route | HTTP | Generated tool name |
+|-------|------|---------------------|
+| `/api/users/{id}` | GET | `get_users_by_id` |
+| `/api/users` | POST | `post_users` |
+| `/api/todos/{id}` | DELETE | `delete_todos_by_id` |
+
+Rules:
+
+- HTTP method included when `MapHttpMethods` is `true`
+- Path segments lowercased; `-` → `_`
+- `api` segment skipped
+- Route parameters become `by_{param}` (e.g. `{id}` → `by_id`)
+- `ToolNamePrefix` prepended when set
+
+### Input schema
+
+API Explorer parameters become JSON Schema properties:
+
+- **Route** → required/optional from model metadata
+- **Query** → query string on invocation
+- **Body** → JSON body (single param or composite object)
+- Types: `string`, `bool`, integers, `decimal`/`double`/`float`, enums, arrays, nested objects
+
+Example for `GET /api/users/{id}`:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" }
+  },
+  "required": ["id"]
+}
+```
+
+### Invocation
+
+On `tools/call`:
+
+1. Route parameters substituted into the path
+2. Query parameters appended
+3. Remaining arguments serialized as JSON body for POST/PUT/PATCH
+4. Matching endpoint invoked in-process
+5. Response body returned as MCP text content
+6. HTTP status ≥ 400 reported as tool errors
 
 ## How it works
 
@@ -212,204 +431,30 @@ builder.Services.AddDotnetMcp(options =>
                                               └─────────────────────┘
 ```
 
-1. **`AddDotnetMcp()`** registers discovery, schema generation, and MCP server handlers for HTTP or stdio.
-2. **`MapDotnetMcp("/mcp")`** maps the MCP HTTP endpoint (skipped automatically when `Transport = Stdio`).
-3. On **`tools/list`**, exposed endpoints are returned as MCP tools with JSON Schema input definitions.
-4. On **`tools/call`**, arguments are mapped to route, query, and body parameters and the matching endpoint is invoked in-process.
+1. **`AddDotnetMcp()`** registers discovery, schema generation, and MCP handlers.
+2. **`MapDotnetMcp("/mcp")`** maps the HTTP endpoint (skipped when `Transport = Stdio`).
+3. **`tools/list`** returns exposed endpoints as tools with JSON Schema inputs.
+4. **`tools/call`** maps arguments to route/query/body and invokes the endpoint in-process.
 
-## Configuration
+## Troubleshooting
 
-Configure via the `AddDotnetMcp` callback:
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| No tools in `tools/list` | API Explorer not registered, or nothing annotated under `OptIn` | Call `AddEndpointsApiExplorer()` / enable controller API Explorer; add `.WithMcpExpose` / `[McpExpose]` |
+| Expected endpoint missing | Path excluded, `[McpIgnore]`, or filter rejected it | Check `ExcludePaths`, attributes, and `Filter` |
+| `401` / `403` on tool call | Auth not configured or roles don’t match | Set up ASP.NET auth; send `Authorization` on the MCP client; check policies / `roles:` |
+| Stdio host hangs or misparses | Logs written to stdout | Use `UseDotnetMcpStdioLogging()` so logs go to stderr |
+| Client can’t connect over HTTP | Wrong URL or transport mode | Use `/mcp` (or your mapped path) with streamable HTTP |
 
-```csharp
-builder.Services.AddDotnetMcp(options =>
-{
-    options.ExposureMode = McpExposureMode.OptIn;
-    options.MapHttpMethods = true;
-    options.ToolNamePrefix = "myapp";
-    options.ExcludePaths = new[] { "internal/", "health" };
-    options.McpRoutePattern = "/mcp";
-    options.Filter = descriptor => !descriptor.Route.Contains("admin");
-});
+## Building from source
+
+```bash
+git clone https://github.com/rehmnabdul/dotnet-mcp.git
+cd dotnet-mcp
+dotnet restore
+dotnet build -c Release
+dotnet test -c Release
 ```
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `ExposureMode` | `OptIn` | `OptIn` exposes only annotated endpoints; `OptOut` exposes all except ignored |
-| `RequireExplicitAnnotation` | `false` | When `OptOut`, require `[McpExpose]` / `[McpExposeAll]` / `.WithMcpExpose()` |
-| `MapHttpMethods` | `true` | Prefix auto-generated tool names with the HTTP method (e.g. `get_users_by_id`) |
-| `ToolNamePrefix` | `""` | Prefix applied to all tool names |
-| `ExcludePaths` | `[]` | Path prefixes to never expose (case-insensitive) |
-| `McpRoutePattern` | `"/mcp"` | Documented default route pattern (map with `MapDotnetMcp`) |
-| `Filter` | `null` | Additional predicate over `EndpointDescriptor` |
-| `EnforceEndpointAuthorization` | `true` | Enforce `[Authorize]` / roles on MCP tool calls |
-| `Transport` | `Http` | `Http` for `MapDotnetMcp`, or `Stdio` for local stdin/stdout hosts |
-| `EnableOpenApiResource` | `true` | Expose a generated OpenAPI 3 document as an MCP resource |
-| `OpenApiResourceUri` | `openapi://dotnet-mcp/document` | URI used in `resources/list` and `resources/read` |
-| `OpenApiTitle` / `OpenApiVersion` | `dotnet-mcp` / `1.0.0` | OpenAPI `info` fields |
-
-## Exposing endpoints
-
-### Exposure modes
-
-**Opt-in (recommended for production)**
-
-Only endpoints you explicitly mark are exposed as MCP tools.
-
-```csharp
-options.ExposureMode = McpExposureMode.OptIn;
-```
-
-**Opt-out**
-
-All discovered endpoints are exposed unless ignored or excluded.
-
-```csharp
-options.ExposureMode = McpExposureMode.OptOut;
-options.ExcludePaths = new[] { "health", "internal/" };
-```
-
-### Minimal APIs — `.WithMcpExpose()`
-
-```csharp
-app.MapDelete("/api/todos/{id}", (int id) => Results.NoContent())
-   .WithMcpExpose("delete_todo", "Delete a todo", destructive: true);
-```
-
-Parameters:
-
-| Parameter | Description |
-|-----------|-------------|
-| `name` | Explicit MCP tool name (recommended) |
-| `description` | Shown to MCP clients in `tools/list` |
-| `readOnly` | Sets the MCP read-only hint (defaults from HTTP method for GET/HEAD) |
-| `destructive` | Sets the MCP destructive hint (defaults to `true` for DELETE) |
-
-### Controllers — `[McpExpose]`
-
-```csharp
-[ApiController]
-[Route("api/[controller]")]
-public class UsersController : ControllerBase
-{
-    [HttpGet("{id}")]
-    [McpExpose(Description = "Get user by id", ReadOnly = true)]
-    public IActionResult Get(string id) => Ok(new { id, name = "Ada" });
-
-    [HttpPost]
-    [McpExpose(Description = "Create user")]
-    public IActionResult Create([FromBody] CreateUserRequest request) =>
-        Created(string.Empty, request);
-}
-```
-
-### Authorization
-
-MCP tool calls run outside the normal HTTP middleware pipeline for the target endpoint, so authorization is enforced explicitly before invocation:
-
-1. Endpoint `[Authorize]` / policy / role metadata (unless `[AllowAnonymous]`)
-2. `[McpExpose(Roles = ...)]` / `.WithMcpExpose` role requirements (always enforced when set)
-3. The MCP request's authenticated `User` and `Authorization` header are copied onto the in-process call
-
-```csharp
-[HttpGet("admin/report")]
-[Authorize(Roles = "Admin")]
-[McpExpose(Name = "get_admin_report", Description = "Admin-only report")]
-public IActionResult AdminReport() => Ok(new { ok = true });
-
-// Or require roles only at the MCP layer:
-[HttpGet("stats")]
-[AllowAnonymous]
-[McpExpose(Name = "get_stats", Roles = new[] { "Analyst" })]
-public IActionResult Stats() => Ok();
-```
-
-Your app still needs standard ASP.NET Core auth setup (`AddAuthentication`, `AddAuthorization`, `UseAuthentication`).
-
-To disable enforcement (not recommended):
-
-```csharp
-builder.Services.AddDotnetMcp(options =>
-{
-    options.EnforceEndpointAuthorization = false;
-});
-```
-
-### Hide endpoints — `[McpIgnore]`
-
-```csharp
-[HttpGet("health")]
-[McpIgnore]
-public IActionResult Health() => Ok();
-```
-
-Apply to a controller class to ignore all its actions.
-
-### Expose all actions on a controller — `[McpExposeAll]`
-
-```csharp
-[McpExposeAll]
-[ApiController]
-[Route("api/[controller]")]
-public class ReportsController : ControllerBase
-{
-    // All actions are exposed unless individually ignored
-}
-```
-
-## Tool naming
-
-When no explicit name is provided, names are generated from the HTTP method and route:
-
-| Route | HTTP | Generated tool name |
-|-------|------|---------------------|
-| `/api/users/{id}` | GET | `get_users_by_id` |
-| `/api/users` | POST | `post_users` |
-| `/api/todos/{id}` | DELETE | `delete_todos_by_id` |
-
-Rules:
-
-- HTTP method is included when `MapHttpMethods` is `true`
-- Path segments are lowercased; `-` becomes `_`
-- The `api` segment is skipped
-- Route parameters become `by_{param}` (e.g. `{id}` → `by_id`)
-- `ToolNamePrefix` is prepended when set
-
-## Tool input schema
-
-Parameters from API Explorer become JSON Schema properties:
-
-- **Route** parameters → required/optional based on model metadata
-- **Query** parameters → query string on invocation
-- **Body** parameters → JSON request body (single body param or composite object)
-- Supported types include `string`, `bool`, integer types, `decimal`/`double`/`float`, enums, arrays, and nested objects
-
-Example schema for `GET /api/users/{id}`:
-
-```json
-{
-  "type": "object",
-  "properties": {
-    "id": { "type": "string" }
-  },
-  "required": ["id"]
-}
-```
-
-## MCP tool invocation
-
-When a client calls a tool:
-
-1. Route parameters are substituted into the path
-2. Query parameters are appended to the query string
-3. Remaining arguments are serialized as JSON body for POST/PUT/PATCH
-4. The matching endpoint is found and invoked in-process
-5. The HTTP response body is returned as MCP text content
-6. HTTP status codes ≥ 400 are reported as tool errors
-
-The MCP request's `Authorization` header and authenticated `User` are forwarded to the invoked endpoint. Authorization metadata is evaluated before invocation (see [Authorization](#authorization)).
-
-## Project structure
 
 ```
 dotnet-mcp/
@@ -429,47 +474,25 @@ dotnet-mcp/
     └── publish.yml               # NuGet publish on version tags
 ```
 
-## Building from source
-
-```bash
-git clone https://github.com/rehmnabdul/dotnet-mcp.git
-cd dotnet-mcp
-dotnet restore
-dotnet build -c Release
-dotnet test -c Release
-```
-
-Run samples:
-
 ```bash
 dotnet run --project samples/TodoApi.Minimal
 dotnet run --project samples/TodoApi.Stdio
 dotnet run --project samples/TodoApi.Auth
-```
 
-Pack locally:
-
-```bash
 dotnet pack src/DotnetMcp.AspNetCore/DotnetMcp.AspNetCore.csproj -c Release -o artifacts
 ```
 
 ## Releases
 
-### `1.0.0`
+### `1.0.0` (stable)
 
-First stable release.
+First stable release on **ModelContextProtocol.AspNetCore 1.4.1**.
 
-**Includes:**
-
-- Opt-in-by-default endpoint exposure (`McpExposureMode.OptIn`)
-- HTTP (streamable) and stdio MCP transports
-- Authorization enforcement for `[Authorize]`, policies, and MCP roles
+- Opt-in-by-default exposure (`McpExposureMode.OptIn`)
+- HTTP (streamable) and stdio transports
+- Authorization enforcement + `.WithMcpExpose(..., roles:)`
 - OpenAPI 3 document as an MCP resource
-- Samples: Minimal (HTTP), Stdio, Auth (JWT + policies)
-- `.WithMcpExpose(..., roles:)` for Minimal APIs
-- Built on stable **ModelContextProtocol.AspNetCore 1.4.1** (no preview MCP dependency)
-
-**Install:**
+- Samples: Minimal, Stdio, Auth
 
 ```bash
 dotnet add package DotnetMcp.AspNetCore --version 1.0.0
@@ -477,109 +500,28 @@ dotnet add package DotnetMcp.AspNetCore --version 1.0.0
 
 **Breaking vs early alphas:** default `ExposureMode` is `OptIn` (was `OptOut` before `1.0.0-rc.1`).
 
-### `1.0.0-rc.1`
+### Previous pre-releases
 
-Release candidate toward stable 1.0.
-
-**Includes / changes:**
-
-- Default `ExposureMode` is now **`OptIn`** (breaking vs earlier alphas that defaulted to `OptOut`)
-- Auth policy sample (`samples/TodoApi.Auth`) with JWT + ASP.NET policies + MCP roles
-- `.WithMcpExpose(..., roles:)` support for Minimal APIs
-- Phase 2 features: auth enforcement, stdio, OpenAPI resource
-
-**Install:**
-
-```bash
-dotnet add package DotnetMcp.AspNetCore --version 1.0.0-rc.1
-```
-
-### `0.1.3-alpha`
-
-OpenAPI document as an MCP resource.
-
-**Includes:**
-
-- Generated OpenAPI 3.0 document from MCP-exposed endpoints
-- `resources/list` + `resources/read` handlers (`openapi://dotnet-mcp/document`)
-- Options: `EnableOpenApiResource`, `OpenApiResourceUri`, `OpenApiTitle`, `OpenApiVersion`
-
-**Install:**
-
-```bash
-dotnet add package DotnetMcp.AspNetCore --version 0.1.3-alpha
-```
-
-### `0.1.2-alpha`
-
-Stdio transport for local MCP hosts.
-
-**Includes:**
-
-- `McpTransportMode.Stdio` / `DotnetMcpOptions.Transport`
-- `UseDotnetMcpStdioLogging()` helper (stderr logging)
-- `samples/TodoApi.Stdio` and stdio integration test
-- `MapDotnetMcp` is a no-op when transport is stdio
-
-**Install:**
-
-```bash
-dotnet add package DotnetMcp.AspNetCore --version 0.1.2-alpha
-```
-
-### `0.1.1-alpha`
-
-Package metadata fix + authorization enforcement.
-
-**Includes:**
-
-- NuGet packages now carry MIT license, authors, project/repository URLs, and symbol packages (`.snupkg`)
-- MCP tool calls enforce `[Authorize]`, policies/roles, and `[McpExpose(Roles = ...)]`
-- Authenticated `User` is forwarded with the in-process invocation
-- `EnforceEndpointAuthorization` option (default `true`)
-
-**Install:**
-
-```bash
-dotnet add package DotnetMcp.AspNetCore --version 0.1.1-alpha
-```
-
-### `0.1.0-alpha` (2026-07-19)
-
-First public pre-release on NuGet.
-
-**Includes:**
-
-- MCP HTTP server at a configurable route (default `/mcp`)
-- Opt-in and opt-out endpoint exposure
-- `[McpExpose]`, `[McpIgnore]`, `[McpExposeAll]`, and `.WithMcpExpose()`
-- Automatic JSON Schema generation from API Explorer
-- In-process endpoint invocation with auth header forwarding
-- Sample app and integration tests
+| Version | Highlights |
+|---------|------------|
+| `1.0.0-rc.1` | OptIn default, auth sample, MCP roles on Minimal APIs |
+| `0.1.3-alpha` | OpenAPI MCP resource |
+| `0.1.2-alpha` | Stdio transport |
+| `0.1.1-alpha` | Package metadata + auth enforcement |
+| `0.1.0-alpha` | First public NuGet pre-release |
 
 ### Publishing a new version
 
-Maintainers: bump `Version` in root `Directory.Build.props`, merge to `main`, then tag and push:
+Maintainers: bump `Version` in `Directory.Build.props`, merge to `main`, then:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
-> If `v1.0.0` was previously pushed on an RC commit, delete and recreate the tag on the stable commit before publishing:
->
-> ```bash
-> git tag -d v1.0.0
-> git push origin :refs/tags/v1.0.0
-> git tag v1.0.0
-> git push origin v1.0.0
-> ```
-
-The [Publish NuGet](.github/workflows/publish.yml) workflow runs on `v*` tags, uses the `production` GitHub environment, and pushes all three packages to nuget.org.
+The [Publish NuGet](.github/workflows/publish.yml) workflow runs on `v*` tags (GitHub `production` environment) and pushes all three packages to nuget.org.
 
 ## Public API (1.0 surface)
-
-Stable entry points for application authors:
 
 | API | Purpose |
 |-----|---------|
@@ -592,8 +534,8 @@ Stable entry points for application authors:
 
 ## Roadmap
 
-- Stable **1.0.0** is the current supported line
-- Optional later: multi-document OpenAPI, OIDC/Entra sample, richer resource templates
+- **1.0.x** — bugfix and docs on the stable line
+- Later (additive): multi-document OpenAPI, OIDC/Entra sample, richer resource templates
 
 ## Contributing
 
@@ -602,7 +544,7 @@ Stable entry points for application authors:
 3. Add tests for behavior changes
 4. Open a pull request against `main`
 
-CI runs build and tests on every push and pull request to `main`.
+CI builds and tests every push and PR to `main`.
 
 ## License
 

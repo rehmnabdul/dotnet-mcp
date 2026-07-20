@@ -2,7 +2,7 @@ namespace DotnetMcp.Abstractions;
 
 public class DotnetMcpOptions
 {
-    public McpExposureMode ExposureMode { get; set; } = McpExposureMode.OptOut;
+    public McpExposureMode ExposureMode { get; set; } = McpExposureMode.OptIn;
 
     public bool MapHttpMethods { get; set; } = true;
 

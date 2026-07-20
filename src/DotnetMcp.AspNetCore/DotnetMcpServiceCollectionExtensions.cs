@@ -13,22 +13,29 @@ public static class DotnetMcpServiceCollectionExtensions
         this IServiceCollection services,
         Action<DotnetMcpOptions>? configure = null)
     {
+        var options = new DotnetMcpOptions();
+        configure?.Invoke(options);
+
         services.AddOptions<DotnetMcpOptions>();
         if (configure is not null)
         {
             services.Configure(configure);
         }
+        else
+        {
+            services.Configure<DotnetMcpOptions>(_ => { });
+        }
 
         services.TryAddSingleton<EndpointExposureFilter>(sp =>
         {
-            var options = sp.GetRequiredService<IOptions<DotnetMcpOptions>>().Value;
-            return new EndpointExposureFilter(options);
+            var resolved = sp.GetRequiredService<IOptions<DotnetMcpOptions>>().Value;
+            return new EndpointExposureFilter(resolved);
         });
 
         services.TryAddSingleton<ToolNamingStrategy>(sp =>
         {
-            var options = sp.GetRequiredService<IOptions<DotnetMcpOptions>>().Value;
-            return new ToolNamingStrategy(options);
+            var resolved = sp.GetRequiredService<IOptions<DotnetMcpOptions>>().Value;
+            return new ToolNamingStrategy(resolved);
         });
 
         services.TryAddSingleton<ToolSchemaGenerator>();
@@ -40,27 +47,37 @@ public static class DotnetMcpServiceCollectionExtensions
 
         services.AddHttpContextAccessor();
 
-        services.AddMcpServer(options =>
+        var mcpServer = services.AddMcpServer(serverOptions =>
         {
-            options.ServerInfo = new Implementation
+            serverOptions.ServerInfo = new Implementation
             {
                 Name = "dotnet-mcp",
                 Version = typeof(DotnetMcpServiceCollectionExtensions).Assembly.GetName().Version?.ToString() ?? "0.1.0"
             };
-        })
-        // Stateless mode keeps IHttpContextAccessor/User available during tools/call
-        // (required for auth enforcement on ModelContextProtocol.AspNetCore 0.2.x).
-        .WithHttpTransport(options => options.Stateless = true)
-        .WithListToolsHandler((context, cancellationToken) =>
-        {
-            var handlers = context.Services!.GetRequiredService<McpToolHandlers>();
-            return handlers.ListToolsAsync(context, cancellationToken);
-        })
-        .WithCallToolHandler((context, cancellationToken) =>
-        {
-            var handlers = context.Services!.GetRequiredService<McpToolHandlers>();
-            return handlers.CallToolAsync(context, cancellationToken);
         });
+
+        if (options.Transport == McpTransportMode.Stdio)
+        {
+            mcpServer.WithStdioServerTransport();
+        }
+        else
+        {
+            // Stateless mode keeps IHttpContextAccessor/User available during tools/call
+            // (required for auth enforcement on ModelContextProtocol.AspNetCore 0.2.x).
+            mcpServer.WithHttpTransport(httpOptions => httpOptions.Stateless = true);
+        }
+
+        mcpServer
+            .WithListToolsHandler((context, cancellationToken) =>
+            {
+                var handlers = context.Services!.GetRequiredService<McpToolHandlers>();
+                return handlers.ListToolsAsync(context, cancellationToken);
+            })
+            .WithCallToolHandler((context, cancellationToken) =>
+            {
+                var handlers = context.Services!.GetRequiredService<McpToolHandlers>();
+                return handlers.CallToolAsync(context, cancellationToken);
+            });
 
         return services;
     }

@@ -7,7 +7,18 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
+var useStdio = string.Equals(
+    Environment.GetEnvironmentVariable("DOTNET_MCP_TRANSPORT"),
+    "stdio",
+    StringComparison.OrdinalIgnoreCase);
+
 var builder = WebApplication.CreateBuilder(args);
+
+if (useStdio)
+{
+    builder.UseDotnetMcpStdioLogging();
+    builder.WebHost.UseUrls("http://127.0.0.1:0");
+}
 
 builder.Services.AddMvcCore().AddApiExplorer();
 builder.Services.AddControllers();
@@ -17,6 +28,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddDotnetMcp(options =>
 {
     options.ExposureMode = McpExposureMode.OptIn;
+    options.Transport = useStdio ? McpTransportMode.Stdio : McpTransportMode.Http;
 });
 
 var app = builder.Build();

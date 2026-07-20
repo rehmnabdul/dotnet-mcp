@@ -21,4 +21,10 @@ public class DotnetMcpOptions
     /// (<c>[Authorize]</c>, policies, roles) and <see cref="McpExposeAttribute.Roles"/>.
     /// </summary>
     public bool EnforceEndpointAuthorization { get; set; } = true;
+
+    /// <summary>
+    /// MCP transport. Defaults to <see cref="McpTransportMode.Http"/>.
+    /// Set to <see cref="McpTransportMode.Stdio"/> for local agent/CLI hosts.
+    /// </summary>
+    public McpTransportMode Transport { get; set; } = McpTransportMode.Http;
 }

@@ -4,12 +4,10 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <IsPackable>false</IsPackable>
-    <RollForward>LatestMajor</RollForward>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\src\DotnetMcp.AspNetCore\DotnetMcp.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\DotnetMcp.AspNetCore\DotnetMcp.AspNetCore.csproj" />
   </ItemGroup>
 
 </Project>
